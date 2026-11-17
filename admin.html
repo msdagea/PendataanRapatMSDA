@@ -1,0 +1,53 @@
+<!doctype html><html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin Pendataan</title><link rel="stylesheet" href="style.css"></head><body>
+<main><h1>ADMIN</h1>
+<div id="login" class="card"><h2>Masuk</h2><input id="pin" type="password" placeholder="PIN admin"><button class="go" id="in">MASUK</button><div id="lm"></div></div>
+<div id="panel" class="hide">
+<div class="card"><h2>Pengaturan</h2>
+<input id="url" placeholder="Link spreadsheet"><button class="go" id="save">SIMPAN LINK</button><div id="sm"></div>
+<p style="margin:14px 0 0">Tampilan untuk anggota:</p>
+<div class="btns" id="modes"><button class="b" data-m="tutup">TUTUP</button><button class="b" data-m="pendataan">PENDATAAN</button><button class="b" data-m="massa">KUORUM MASSA</button><button class="b" data-m="ring1">KUORUM RING 1</button></div></div>
+<div class="card" id="info"></div><div class="stats" id="stats"></div><div class="card big" id="qs"></div>
+<div class="two">
+<div class="card"><h2>Input per NIM</h2><input id="nim" inputmode="numeric" placeholder="Ketik NIM">
+<div class="btns" id="mk"><button class="b" data-c="e">ONTIME</button><button class="b" data-c="f">TELAT</button><button class="b" data-c="g">TIDAK HADIR</button></div><div id="nm"></div></div>
+<div class="card"><h2>Cari nama</h2><input id="q" placeholder="Ketik nama..."><div id="res"></div></div></div>
+</div></main>
+<script src="common.js"></script><script>
+frame(); let pin = sessionStorage.getItem("pin") || "";
+const call = p => api({ ...p, pin });
+async function load() {
+  const s = await call({ action: "adminState" });
+  if (!s.ok) { sessionStorage.removeItem("pin"); $("#login").classList.remove("hide"); $("#panel").classList.add("hide"); return say($("#lm"), s.error, 1); }
+  S = s; $("#login").classList.add("hide"); $("#panel").classList.remove("hide");
+  if (document.activeElement !== $("#url")) $("#url").value = s.url;
+  document.querySelectorAll("#modes .b").forEach(b => b.classList.toggle("on", b.dataset.m === s.mode));
+  if (!s.configured) return;
+  renderInfo(s); renderStats(s);
+  $("#qs").innerHTML = `<h2>Kuorum</h2><div class="t">Massa: ${esc(s.quorums.massa.text)} (${esc(s.quorums.massa.count)})</div><p class="t" style="font-size:20px">Ring 1: ${esc(s.quorums.ring1.text)} (${esc(s.quorums.ring1.count)})</p>`;
+  search();
+}
+$("#in").onclick = () => { pin = $("#pin").value; sessionStorage.setItem("pin", pin); load(); };
+$("#save").onclick = async () => { const r = await call({ action: "adminSetConfig", sheetUrl: $("#url").value.trim() }); say($("#sm"), r.ok ? "Link tersimpan" : r.error, !r.ok); load(); };
+$("#modes").onclick = async e => { const b = e.target.closest("button"); if (!b) return; const r = await call({ action: "adminSetConfig", mode: b.dataset.m }); if (!r.ok) say($("#sm"), r.error, 1); load(); };
+async function mark(nim, col, val) {
+  const r = await call({ action: "adminMark", nim, col, val });
+  return r;
+}
+$("#mk").onclick = async e => {
+  const b = e.target.closest("button"); if (!b) return;
+  const r = await mark($("#nim").value.trim(), b.dataset.c);
+  say($("#nm"), r.ok ? `${r.nama} ditandai ${b.textContent}` : r.error, !r.ok);
+  if (r.ok) { $("#nim").value = ""; load(); }
+};
+function search() {
+  const q = $("#q").value.trim().toLowerCase(); if (!q) return $("#res").innerHTML = "";
+  const tag = m => m.e ? "✓ Ontime" : m.f ? "✓ Telat" : m.g ? "Tidak hadir" : "";
+  $("#res").innerHTML = S.members.filter(m => m.nama.toLowerCase().includes(q) || m.nim.includes(q)).slice(0, 8).map(m =>
+    `<div class="row f"><div>${esc(m.nama)}<small>${esc(m.nim)} ${tag(m)}</small></div><div class="btns" style="margin:0">` +
+    [["e", "Ontime"], ["f", "Telat"], ["g", "Absen"]].map(([c, t]) => `<button class="b mini" onclick="quick('${m.nim}','${c}')">${t}</button>`).join("") +
+    `<button class="b mini" onclick="quick('${m.nim}','e','0')">✕</button></div></div>`).join("") || "<p>Tidak ditemukan.</p>";
+}
+async function quick(nim, c, v) { const r = await mark(nim, c, v); if (!r.ok) say($("#nm"), r.error, 1); load(); }
+$("#q").oninput = search;
+if (pin) load();
+</script></body></html>
